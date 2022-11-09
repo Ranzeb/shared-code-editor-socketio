@@ -1,0 +1,67 @@
+import React, { useEffect, useRef } from "react";
+import Codemirror from "codemirror";
+import "codemirror/lib/codemirror.css";
+import "codemirror/theme/dracula.css";
+import "codemirror/mode/javascript/javascript";
+import "codemirror/mode/python/python";
+import "codemirror/addon/edit/closetag";
+import "codemirror/addon/edit/closebrackets";
+import ACTIONS from "../Actions";
+
+const Editor = ({ socketRef, roomId, onCodeChange, language }) => {
+	const editorRef = useRef(null);
+
+	useEffect(() => {
+		async function init() {
+			editorRef.current = Codemirror.fromTextArea(
+				document.getElementById("realTimeEditor"),
+				{
+					mode: { name: language, json: true },
+					theme: "dracula",
+					autoCloseTags: true,
+					autoCloseBrackets: true,
+					lineNumbers: true,
+				}
+			);
+		}
+		init();
+	}, []);
+
+	useEffect(() => {
+		editorRef.current.setOption("mode", language);
+
+	}, [language]);
+
+	useEffect(() => {
+		editorRef.current.on("change", (editorInstance, data) => {
+			const origin = data.origin;
+			const code = editorInstance.getValue();
+			const cursorPosition = editorInstance.getCursor();
+			onCodeChange(code);
+			if (origin !== "setValue") {
+				socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+					code,
+					roomId,
+					cursorPosition
+				});
+			}
+		});
+
+		if (socketRef.current) {
+			socketRef.current.on(ACTIONS.CODE_CHANGE, ({ code, cursorPosition }) => {
+				if (code !== null) {
+					editorRef.current.setValue(code);
+					editorRef.current.setCursor(cursorPosition);
+				}
+			});
+		}
+
+		return () => {
+			socketRef.current.off(ACTIONS.CODE_CHANGE);
+		};
+	}, [socketRef.current]);
+
+	return <textarea id="realTimeEditor"></textarea>;
+};
+
+export default Editor;
